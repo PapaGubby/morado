@@ -1,3 +1,7 @@
-**
-!dist/**
-!package.json
+src/**
+tsconfig.json
+*.tsbuildinfo
+node_modules/**
+../**
+../../**
+../../../**

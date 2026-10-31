@@ -2,6 +2,9 @@ local HttpService = game:GetService("HttpService")
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 
 local DEFAULT_SERVER = "34872"
+local connected = false
+local syncing = false
+local revision = 0
 local services = {
     ReplicatedFirst = game:GetService("ReplicatedFirst"),
     ReplicatedStorage = game:GetService("ReplicatedStorage"),
@@ -176,11 +179,27 @@ local function connect()
         return request("/api/health")
     end)
     if not success then
+        connected = false
         setStatus("Connection failed", Color3.fromRGB(220, 110, 110))
-        warn(result)
         return
     end
+    connected = true
+    revision = result.revision or 0
     setStatus("Connected - protocol " .. tostring(result.protocol), Color3.fromRGB(110, 220, 140))
+end
+
+local function getOrCreateParent(pathParts)
+    local parent = game
+    for index = 1, #pathParts do
+        local child = parent:FindFirstChild(pathParts[index])
+        if not child then
+            child = Instance.new("Folder")
+            child.Name = pathParts[index]
+            child.Parent = parent
+        end
+        parent = child
+    end
+    return parent
 end
 
 local function applyUpdate(update)
@@ -189,10 +208,7 @@ local function applyUpdate(update)
         table.insert(pieces, part)
     end
     local fileName = pieces[#pieces]
-    local parent = game
-    for index = 1, #pieces - 1 do
-        parent = parent:FindFirstChild(pieces[index]) or parent
-    end
+    local parent = getOrCreateParent({ table.unpack(pieces, 1, #pieces - 1) })
     local name = string.gsub(fileName, "%.server%.lua$", "")
     name = string.gsub(name, "%.client%.lua$", "")
     name = string.gsub(name, "%.module%.lua$", "")
@@ -209,6 +225,10 @@ local function applyUpdate(update)
 end
 
 local function sync()
+    if syncing then
+        return
+    end
+    syncing = true
     local success, result = pcall(function()
         local message = request("/api/sync")
         ChangeHistoryService:SetWaypoint("Morado sync started")
@@ -216,14 +236,16 @@ local function sync()
             applyUpdate(update)
         end
         ChangeHistoryService:SetWaypoint("Morado sync complete")
+        revision = message.revision or revision
         return #message.updates
     end)
     if success then
         setStatus("Synced " .. tostring(result) .. " scripts", Color3.fromRGB(110, 220, 140))
     else
+        connected = false
         setStatus("Sync failed", Color3.fromRGB(220, 110, 110))
-        warn(result)
     end
+    syncing = false
 end
 
 local function collect(container, prefix, result)
@@ -252,10 +274,27 @@ local function export()
     if success then
         setStatus("Exported " .. tostring(result) .. " scripts", Color3.fromRGB(110, 220, 140))
     else
+        connected = false
         setStatus("Export failed", Color3.fromRGB(220, 110, 110))
-        warn(result)
     end
 end
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if connected and not syncing then
+            local success, result = pcall(function()
+                return request("/api/health")
+            end)
+            if success and result.revision and result.revision > revision then
+                sync()
+            elseif not success then
+                connected = false
+                setStatus("Connection lost", Color3.fromRGB(220, 110, 110))
+            end
+        end
+    end
+end)
 
 openButton.Click:Connect(function()
     widget.Enabled = not widget.Enabled

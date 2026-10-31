@@ -9,7 +9,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}"
       ],
       "outFiles": [
-        "${workspaceFolder}/apps/vscode-extension/dist/**/*.js"
+        "${workspaceFolder}/apps/vscode-extension/dist/**/*.cjs"
       ],
       "preLaunchTask": "Build Morado"
     }

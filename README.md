@@ -7,26 +7,23 @@ Morado connects Visual Studio Code and Roblox Studio through a local sync server
 ```text
 apps/
   vscode-extension/
-packages/
-  protocol/
-  project-parser/
-  sync-server/
 roblox/
   plugin/
-examples/
-  basic-game/
 ```
 
-## Development
+## Release build
 
 ```powershell
-npm install
-npm run build
+npm.cmd install
+npm.cmd run build
+npm.cmd run extension:package
 ```
 
-Open the repository in Visual Studio Code and run `Morado: Start`.
+The generated VSIX is in `apps/vscode-extension`. Install it in Visual Studio Code with `Extensions: Install from VSIX`.
 
-The extension creates a `morado.project.json` file and the standard Roblox service folders. Enable HTTP requests in Roblox Studio, paste `roblox/plugin/MoradoPlugin.lua` into a plugin script, and press `Connect`.
+After installation, open a game workspace and run `Morado: Start`. Morado creates the project folders and starts its local server inside the extension. No Node or npm command is needed after the VSIX is installed.
+
+Enable HTTP requests in Roblox Studio, paste `roblox/plugin/MoradoPlugin.lua` into a Studio plugin, enter `34872`, and press `Connect`.
 
 ## Project layout
 

@@ -3,21 +3,19 @@
   "displayName": "Morado",
   "description": "Sync Roblox Studio projects with Visual Studio Code.",
   "publisher": "morado",
+  "license": "MIT",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "main": "./dist/extension.js",
+  "main": "./dist/extension.cjs",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.cjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "package": "npm run build && vsce package --allow-missing-repository"
   },
-  "dependencies": {
-    "@morado/sync-server": "0.1.0"
-  },
   "devDependencies": {
     "@types/vscode": "^1.90.0",
-    "@vscode/vsce": "latest"
+    "@vscode/vsce": "latest",
+    "esbuild": "^0.25.0",
+    "typescript": "latest"
   },
   "engines": {
     "vscode": "^1.90.0"

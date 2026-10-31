@@ -5,8 +5,9 @@
   "version": "0.1.0",
   "description": "A local-first bridge between Visual Studio Code and Roblox Studio.",
   "publisher": "morado",
+  "license": "MIT",
   "type": "module",
-  "main": "./apps/vscode-extension/dist/extension.js",
+  "main": "./apps/vscode-extension/dist/extension.cjs",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -53,7 +54,7 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @morado/protocol && npm run build --workspace @morado/project-parser && npm run build --workspace @morado/sync-server && npm run build --workspace morado-vscode",
+    "build": "npm run build --workspace morado-vscode",
     "typecheck": "npm run typecheck --workspaces",
     "extension:build": "npm run build",
     "extension:package": "npm run package --workspace morado-vscode"

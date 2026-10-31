@@ -1,1 +1,0 @@
-print("Morado is connected")
