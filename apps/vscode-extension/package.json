@@ -1,0 +1,62 @@
+{
+  "name": "morado-vscode",
+  "displayName": "Morado",
+  "description": "Sync Roblox Studio projects with Visual Studio Code.",
+  "publisher": "morado",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "npm run build && vsce package --allow-missing-repository"
+  },
+  "dependencies": {
+    "@morado/sync-server": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "latest"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onCommand:morado.start",
+    "onCommand:morado.stop",
+    "onCommand:morado.sync"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "morado.start",
+        "title": "Morado: Start"
+      },
+      {
+        "command": "morado.stop",
+        "title": "Morado: Stop"
+      },
+      {
+        "command": "morado.sync",
+        "title": "Morado: Sync Now"
+      },
+      {
+        "command": "morado.initialize",
+        "title": "Morado: Initialize Project"
+      }
+    ],
+    "configuration": {
+      "title": "Morado",
+      "properties": {
+        "morado.port": {
+          "type": "number",
+          "default": 34872,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Local port used by the Morado sync server."
+        }
+      }
+    }
+  }
+}

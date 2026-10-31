@@ -1,0 +1,15 @@
+{
+  "name": "BasicGame",
+  "root": "game",
+  "mappings": {
+    "ReplicatedFirst": "ReplicatedFirst",
+    "ReplicatedStorage": "ReplicatedStorage",
+    "ServerScriptService": "ServerScriptService",
+    "ServerStorage": "ServerStorage",
+    "StarterGui": "StarterGui",
+    "StarterPack": "StarterPack",
+    "StarterPlayer/StarterCharacterScripts": "StarterPlayer.StarterCharacterScripts",
+    "StarterPlayer/StarterPlayerScripts": "StarterPlayer.StarterPlayerScripts",
+    "Workspace": "Workspace"
+  }
+}

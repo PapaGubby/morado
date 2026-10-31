@@ -1,0 +1,65 @@
+{
+  "name": "morado",
+  "displayName": "Morado",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A local-first bridge between Visual Studio Code and Roblox Studio.",
+  "publisher": "morado",
+  "type": "module",
+  "main": "./apps/vscode-extension/dist/extension.js",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onCommand:morado.start",
+    "onCommand:morado.stop",
+    "onCommand:morado.sync",
+    "onCommand:morado.initialize"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "morado.start",
+        "title": "Morado: Start"
+      },
+      {
+        "command": "morado.stop",
+        "title": "Morado: Stop"
+      },
+      {
+        "command": "morado.sync",
+        "title": "Morado: Sync Now"
+      },
+      {
+        "command": "morado.initialize",
+        "title": "Morado: Initialize Project"
+      }
+    ],
+    "configuration": {
+      "title": "Morado",
+      "properties": {
+        "morado.port": {
+          "type": "number",
+          "default": 34872,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Local port used by the Morado sync server."
+        }
+      }
+    }
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @morado/protocol && npm run build --workspace @morado/project-parser && npm run build --workspace @morado/sync-server && npm run build --workspace morado-vscode",
+    "typecheck": "npm run typecheck --workspaces",
+    "extension:build": "npm run build",
+    "extension:package": "npm run package --workspace morado-vscode"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "typescript": "latest"
+  }
+}
