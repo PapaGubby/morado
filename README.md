@@ -25,6 +25,8 @@ After installation, open a game workspace and run `Morado: Start`. Morado create
 
 Enable HTTP requests in Roblox Studio, paste `roblox/plugin/MoradoPlugin.lua` into a Studio plugin, enter `34872`, and press `Connect`.
 
+Use `Export` to export the supported services. Select a legacy module in Roblox Studio and use `ExportCurrent` to replace matching old copies in the project with a canonical `init.module.lua` layout.
+
 ## Project layout
 
 Scripts use Roblox naming conventions:
@@ -33,6 +35,14 @@ Scripts use Roblox naming conventions:
 *.server.lua  -> Script
 *.client.lua  -> LocalScript
 *.module.lua  -> ModuleScript
+```
+
+Modules with children use:
+
+```text
+Module/
+  init.module.lua
+  Child.module.lua
 ```
 
 The generated project includes `ReplicatedFirst`, `ReplicatedStorage`, `ServerScriptService`, `ServerStorage`, `StarterGui`, `StarterPack`, `StarterPlayer`, and `Workspace`.

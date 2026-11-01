@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { watch } from "node:fs";
 
@@ -24,7 +24,27 @@ function scriptName(path: string): string {
     .replace(/\.module\.lua$/, "");
 }
 
+function normalizeModulePaths(scripts: ScriptUpdate[]): ScriptUpdate[] {
+  const paths = new Set(scripts.map((script) => script.path));
+  return scripts.map((script) => {
+    if (script.className !== "ModuleScript") return script;
+    const parts = script.path.split("/");
+    const file = parts[parts.length - 1];
+    const name = scriptName(file);
+    if (name === "init") return script;
+    if (parts.length > 1 && parts[parts.length - 2] === name) {
+      return { ...script, path: `${parts.slice(0, -1).join("/")}/init.module.lua` };
+    }
+    const base = scriptName(script.path);
+    if ([...paths].some((path) => path.startsWith(`${base}/`))) {
+      return { ...script, path: `${base}/init.module.lua` };
+    }
+    return script;
+  });
+}
+
 function normalizeExportPaths(scripts: ScriptUpdate[]): ScriptUpdate[] {
+  scripts = normalizeModulePaths(scripts);
   const modulePathsWithChildren = new Set(
     scripts
       .filter((script) => script.className === "ModuleScript")
@@ -72,7 +92,7 @@ async function readProject(root: string): Promise<ScriptUpdate[]> {
   }
 
   await visit(root);
-  return updates.sort((left, right) => left.path.localeCompare(right.path));
+  return normalizeModulePaths(updates).sort((left, right) => left.path.localeCompare(right.path));
 }
 
 function send(response: ServerResponse, status: number, body: unknown): void {
@@ -88,6 +108,84 @@ async function body(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks).toString("utf8");
+}
+
+interface CurrentExport {
+  rootPath: string;
+  rootName: string;
+  scripts: ScriptUpdate[];
+}
+
+async function findMatchingTargets(root: string, rootPath: string, rootName: string): Promise<string[]> {
+  const expected = resolve(root, rootPath);
+  const candidates = new Set<string>();
+  const exactName = rootName.toLowerCase();
+
+  async function visit(directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.toLowerCase() === exactName) candidates.add(path);
+        await visit(path);
+        continue;
+      }
+      if (entry.name.toLowerCase() === `${exactName}.module.lua`) {
+        candidates.add(join(directory, ".."));
+      }
+    }
+  }
+
+  await visit(root);
+  if (candidates.size === 0) {
+    const normalized = exactName.replace(/[^a-z0-9]/g, "");
+    async function findSimilar(directory: string): Promise<void> {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        const name = entry.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (entry.isDirectory()) {
+          if (name.includes(normalized) || normalized.includes(name)) candidates.add(path);
+          await findSimilar(path);
+        }
+      }
+    }
+    await findSimilar(root);
+  }
+  if (candidates.size === 0) candidates.add(expected);
+  return [...candidates].filter((path, index, all) => all.indexOf(path) === index);
+}
+
+async function replaceCurrent(root: string, payload: CurrentExport): Promise<number> {
+  const scripts = normalizeExportPaths(payload.scripts);
+  const targets = await findMatchingTargets(root, payload.rootPath, payload.rootName);
+  const normalizedRoot = payload.rootPath.replaceAll("\\", "/").replace(/\/+$/, "");
+  for (const target of targets) {
+    const relativeTarget = relative(root, target);
+    if (isAbsolute(relativeTarget) || relativeTarget === ".." || relativeTarget.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) {
+      throw new Error("Export target is outside the project root");
+    }
+    await rm(target, { recursive: true, force: true });
+    for (const script of scripts) {
+      const normalizedPath = script.path.replaceAll("\\", "/");
+      const prefix = `${normalizedRoot}/`;
+      const scriptPath = normalizedPath === `${normalizedRoot}.server.lua`
+        ? `${payload.rootName}.server.lua`
+        : normalizedPath === `${normalizedRoot}.client.lua`
+          ? `${payload.rootName}.client.lua`
+          : normalizedPath === `${normalizedRoot}.module.lua`
+            ? `${payload.rootName}.module.lua`
+            : normalizedPath.startsWith(prefix)
+        ? normalizedPath.slice(prefix.length)
+        : normalizedPath;
+      const destination = resolve(target, scriptPath);
+      const pathFromRoot = relative(root, destination);
+      if (isAbsolute(pathFromRoot) || pathFromRoot === ".." || pathFromRoot.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) {
+        throw new Error("Export script is outside the project root");
+      }
+      await mkdir(resolve(destination, ".."), { recursive: true });
+      await writeFile(destination, script.content, "utf8");
+    }
+  }
+  return scripts.length;
 }
 
 export interface SyncServer {
@@ -150,6 +248,13 @@ export async function startSyncServer(projectFile: string, port: number, onLog: 
         }
         await refresh();
         send(response, 200, { ok: true, count: scripts.length, revision });
+        return;
+      }
+      if (request.method === "POST" && request.url === "/api/export-current") {
+        const payload = JSON.parse(await body(request)) as CurrentExport;
+        const count = await replaceCurrent(root, payload);
+        await refresh();
+        send(response, 200, { ok: true, count, revision });
         return;
       }
       send(response, 404, { error: "Not found" });

@@ -148,6 +148,17 @@ exportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 exportButton.TextSize = 13
 exportButton.Parent = actions
 
+local exportCurrentButton = Instance.new("TextButton")
+exportCurrentButton.BackgroundColor3 = Color3.fromRGB(75, 58, 130)
+exportCurrentButton.BorderSizePixel = 0
+exportCurrentButton.Font = Enum.Font.GothamMedium
+exportCurrentButton.Size = UDim2.new(1, 0, 0, 34)
+exportCurrentButton.Text = "ExportCurrent"
+exportCurrentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+exportCurrentButton.TextSize = 13
+exportCurrentButton.LayoutOrder = 7
+exportCurrentButton.Parent = root
+
 local function getBaseUrl()
     local address = string.gsub(addressBox.Text, "^%s*(.-)%s*$", "%1")
     if address == "" then
@@ -335,6 +346,66 @@ local function collect(container, prefix, result)
         elseif child:IsA("ModuleScript") then
             table.insert(result, { path = path .. ".module.lua", className = "ModuleScript", content = child.Source })
         end
+
+        local function getServicePath(instance)
+            local parts = {}
+            local current = instance
+            while current and current ~= game do
+                table.insert(parts, 1, current.Name)
+                if serviceRoots[current.Name] == current then
+                    return table.concat(parts, "/"), current
+                end
+                current = current.Parent
+            end
+            return nil, nil
+        end
+
+        local function collectCurrent(instance, path, result)
+            if instance:IsA("Script") then
+                table.insert(result, { path = path .. ".server.lua", className = "Script", content = instance.Source })
+            elseif instance:IsA("LocalScript") then
+                table.insert(result, { path = path .. ".client.lua", className = "LocalScript", content = instance.Source })
+            elseif instance:IsA("ModuleScript") then
+                table.insert(result, { path = path .. ".module.lua", className = "ModuleScript", content = instance.Source })
+            end
+            local childPath = path
+            if instance:IsA("LuaSourceContainer") then
+                childPath = path
+            end
+            for _, child in ipairs(instance:GetChildren()) do
+                collectCurrent(child, childPath .. "/" .. child.Name, result)
+            end
+        end
+
+        local function exportCurrent()
+            local selection = game:GetService("Selection"):Get()
+            local instance = selection[1]
+            if not instance then
+                setStatus("Select an instance first", Color3.fromRGB(235, 190, 100))
+                return
+            end
+            local rootPath, service = getServicePath(instance)
+            if not rootPath or not service then
+                setStatus("Selection is not under a supported service", Color3.fromRGB(220, 110, 110))
+                return
+            end
+            local result = {}
+            collectCurrent(instance, rootPath, result)
+            local success, count = pcall(function()
+                local response = request("/api/export-current", "POST", {
+                    rootPath = rootPath,
+                    rootName = instance.Name,
+                    scripts = result
+                })
+                return response.count or #result
+            end)
+            if success then
+                setStatus("Exported current " .. tostring(count) .. " scripts", Color3.fromRGB(110, 220, 140))
+            else
+                connected = false
+                setStatus("ExportCurrent failed", Color3.fromRGB(220, 110, 110))
+            end
+        end
         collect(child, path, result)
     end
 end
@@ -380,3 +451,4 @@ end)
 connectButton.MouseButton1Click:Connect(connect)
 syncButton.MouseButton1Click:Connect(sync)
 exportButton.MouseButton1Click:Connect(export)
+exportCurrentButton.MouseButton1Click:Connect(exportCurrent)
