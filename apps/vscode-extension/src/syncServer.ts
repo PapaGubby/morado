@@ -17,6 +17,31 @@ interface ProjectConfig {
   mappings: Record<string, string>;
 }
 
+function scriptName(path: string): string {
+  return path
+    .replace(/\.server\.lua$/, "")
+    .replace(/\.client\.lua$/, "")
+    .replace(/\.module\.lua$/, "");
+}
+
+function normalizeExportPaths(scripts: ScriptUpdate[]): ScriptUpdate[] {
+  const modulePathsWithChildren = new Set(
+    scripts
+      .filter((script) => script.className === "ModuleScript")
+      .filter((script) => scripts.some((child) => child.path.startsWith(`${scriptName(script.path)}/`)))
+      .map((script) => script.path)
+  );
+
+  return scripts.map((script) => {
+    if (!modulePathsWithChildren.has(script.path)) return script;
+    const path = scriptName(script.path);
+    return {
+      ...script,
+      path: `${path}/init.module.lua`
+    };
+  });
+}
+
 const scriptTypes: Record<string, ScriptClass> = {
   ".server.lua": "Script",
   ".client.lua": "LocalScript",
@@ -113,7 +138,7 @@ export async function startSyncServer(projectFile: string, port: number, onLog: 
         return;
       }
       if (request.method === "POST" && request.url === "/api/export") {
-        const scripts = JSON.parse(await body(request)) as ScriptUpdate[];
+        const scripts = normalizeExportPaths(JSON.parse(await body(request)) as ScriptUpdate[]);
         for (const script of scripts) {
           const destination = resolve(root, script.path);
           const pathFromRoot = relative(root, destination);

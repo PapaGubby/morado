@@ -214,9 +214,6 @@ local function getOrCreateParent(pathParts)
             child.Name = pathParts[index]
             child.Parent = parent
         end
-        if child:IsA("LuaSourceContainer") then
-            error("Morado cannot place a script inside " .. child:GetFullName())
-        end
         parent = child
     end
     return parent
@@ -245,17 +242,35 @@ local function applyUpdate(update)
     local name = string.gsub(fileName, "%.server%.lua$", "")
     name = string.gsub(name, "%.client%.lua$", "")
     name = string.gsub(name, "%.module%.lua$", "")
+    if name == "init" and #pieces > 2 then
+        name = pieces[#pieces - 1]
+    end
     if name == "" or name == fileName then
         error("Morado received an unsupported script filename " .. fileName)
     end
     local instance = parent:FindFirstChild(name)
     if not instance or instance.ClassName ~= update.className then
         if instance then
+            local children = instance:GetChildren()
+            for _, child in ipairs(children) do
+                child.Parent = nil
+            end
             instance:Destroy()
+            instance = nil
+            if #children > 0 then
+                instance = Instance.new(update.className)
+                instance.Name = name
+                instance.Parent = parent
+                for _, child in ipairs(children) do
+                    child.Parent = instance
+                end
+            end
         end
-        instance = Instance.new(update.className)
-        instance.Name = name
-        instance.Parent = parent
+        if not instance then
+            instance = Instance.new(update.className)
+            instance.Name = name
+            instance.Parent = parent
+        end
     end
     instance.Source = update.content
 end
@@ -271,6 +286,20 @@ local function sync()
         local synced = 0
         local skipped = 0
         ChangeHistoryService:SetWaypoint("Morado sync started")
+        table.sort(updates, function(left, right)
+            local leftDepth = 0
+            local rightDepth = 0
+            for _ in string.gmatch(left.path, "[^/]+") do
+                leftDepth += 1
+            end
+            for _ in string.gmatch(right.path, "[^/]+") do
+                rightDepth += 1
+            end
+            if leftDepth == rightDepth then
+                return left.path < right.path
+            end
+            return leftDepth < rightDepth
+        end)
         for _, update in ipairs(updates) do
             local updateSuccess = pcall(applyUpdate, update)
             if updateSuccess then
