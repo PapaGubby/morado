@@ -15,6 +15,16 @@ local services = {
     StarterPlayer = game:GetService("StarterPlayer"),
     Workspace = workspace
 }
+local serviceRoots = {
+    ReplicatedFirst = services.ReplicatedFirst,
+    ReplicatedStorage = services.ReplicatedStorage,
+    ServerScriptService = services.ServerScriptService,
+    ServerStorage = services.ServerStorage,
+    StarterGui = services.StarterGui,
+    StarterPack = services.StarterPack,
+    StarterPlayer = services.StarterPlayer,
+    Workspace = services.Workspace
+}
 
 local toolbar = plugin:CreateToolbar("Morado")
 local openButton = toolbar:CreateButton("Morado", "Open Morado", "")
@@ -190,13 +200,22 @@ local function connect()
 end
 
 local function getOrCreateParent(pathParts)
-    local parent = game
-    for index = 1, #pathParts do
+    if #pathParts == 0 then
+        error("Morado received a script without a parent path")
+    end
+    local parent = serviceRoots[pathParts[1]]
+    if not parent then
+        error("Morado does not recognize service " .. tostring(pathParts[1]))
+    end
+    for index = 2, #pathParts do
         local child = parent:FindFirstChild(pathParts[index])
         if not child then
             child = Instance.new("Folder")
             child.Name = pathParts[index]
             child.Parent = parent
+        end
+        if child:IsA("LuaSourceContainer") then
+            error("Morado cannot place a script inside " .. child:GetFullName())
         end
         parent = child
     end
@@ -204,15 +223,31 @@ local function getOrCreateParent(pathParts)
 end
 
 local function applyUpdate(update)
+    if type(update) ~= "table" or type(update.path) ~= "string" or type(update.className) ~= "string" or type(update.content) ~= "string" then
+        error("Morado received an invalid script update")
+    end
+    if update.className ~= "Script" and update.className ~= "LocalScript" and update.className ~= "ModuleScript" then
+        error("Morado does not recognize script type " .. update.className)
+    end
     local pieces = {}
     for part in string.gmatch(update.path, "[^/]+") do
         table.insert(pieces, part)
     end
+    if #pieces < 2 then
+        error("Morado received an invalid script path " .. update.path)
+    end
     local fileName = pieces[#pieces]
-    local parent = getOrCreateParent({ table.unpack(pieces, 1, #pieces - 1) })
+    local parentParts = {}
+    for index = 1, #pieces - 1 do
+        table.insert(parentParts, pieces[index])
+    end
+    local parent = getOrCreateParent(parentParts)
     local name = string.gsub(fileName, "%.server%.lua$", "")
     name = string.gsub(name, "%.client%.lua$", "")
     name = string.gsub(name, "%.module%.lua$", "")
+    if name == "" or name == fileName then
+        error("Morado received an unsupported script filename " .. fileName)
+    end
     local instance = parent:FindFirstChild(name)
     if not instance or instance.ClassName ~= update.className then
         if instance then
@@ -230,18 +265,30 @@ local function sync()
         return
     end
     syncing = true
-    local success, result = pcall(function()
+    local success, synced, skipped = pcall(function()
         local message = request("/api/sync")
+        local updates = message.updates or {}
+        local synced = 0
+        local skipped = 0
         ChangeHistoryService:SetWaypoint("Morado sync started")
-        for _, update in ipairs(message.updates or {}) do
-            applyUpdate(update)
+        for _, update in ipairs(updates) do
+            local updateSuccess = pcall(applyUpdate, update)
+            if updateSuccess then
+                synced += 1
+            else
+                skipped += 1
+            end
         end
         ChangeHistoryService:SetWaypoint("Morado sync complete")
         revision = message.revision or revision
-        return #message.updates
+        return synced, skipped
     end)
     if success then
-        setStatus("Synced " .. tostring(result) .. " scripts", Color3.fromRGB(110, 220, 140))
+        if skipped > 0 then
+            setStatus("Synced " .. tostring(synced) .. ", skipped " .. tostring(skipped), Color3.fromRGB(235, 190, 100))
+        else
+            setStatus("Synced " .. tostring(synced) .. " scripts", Color3.fromRGB(110, 220, 140))
+        end
     else
         connected = false
         setStatus("Sync failed", Color3.fromRGB(220, 110, 110))
