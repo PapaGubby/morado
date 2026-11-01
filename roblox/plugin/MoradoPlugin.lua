@@ -1,10 +1,12 @@
 local HttpService = game:GetService("HttpService")
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
+local Selection = game:GetService("Selection")
 
 local DEFAULT_SERVER = "34872"
 local connected = false
 local syncing = false
 local revision = 0
+local statusToken = 0
 local services = {
     ReplicatedFirst = game:GetService("ReplicatedFirst"),
     ReplicatedStorage = game:GetService("ReplicatedStorage"),
@@ -28,21 +30,13 @@ local serviceRoots = {
 
 local toolbar = plugin:CreateToolbar("Morado")
 local openButton = toolbar:CreateButton("Morado", "Open Morado", "")
-local widgetInfo = DockWidgetPluginGuiInfo.new(
-    Enum.InitialDockState.Float,
-    false,
-    false,
-    320,
-    260,
-    280,
-    220
-)
+local widgetInfo = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 360, 340, 320, 280)
 local widget = plugin:CreateDockWidgetPluginGui("MoradoDock", widgetInfo)
 widget.Title = "Morado"
 widget.Enabled = false
 
 local root = Instance.new("Frame")
-root.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+root.BackgroundColor3 = Color3.fromRGB(28, 29, 34)
 root.BorderSizePixel = 0
 root.Size = UDim2.fromScale(1, 1)
 root.Parent = widget
@@ -59,31 +53,47 @@ layout.Padding = UDim.new(0, 8)
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Parent = root
 
+local header = Instance.new("Frame")
+header.BackgroundTransparency = 1
+header.Size = UDim2.new(1, 0, 0, 28)
+header.LayoutOrder = 1
+header.Parent = root
+
 local title = Instance.new("TextLabel")
 title.BackgroundTransparency = 1
-title.Size = UDim2.new(1, 0, 0, 28)
+title.Size = UDim2.new(0.5, 0, 1, 0)
 title.Font = Enum.Font.GothamBold
 title.Text = "Morado"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 20
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.LayoutOrder = 1
-title.Parent = root
+title.Parent = header
+
+local connectionStatus = Instance.new("TextLabel")
+connectionStatus.BackgroundTransparency = 1
+connectionStatus.Position = UDim2.new(0.5, 0, 0, 0)
+connectionStatus.Size = UDim2.new(0.5, 0, 1, 0)
+connectionStatus.Font = Enum.Font.GothamMedium
+connectionStatus.Text = "Disconnected"
+connectionStatus.TextColor3 = Color3.fromRGB(220, 110, 110)
+connectionStatus.TextSize = 12
+connectionStatus.TextXAlignment = Enum.TextXAlignment.Right
+connectionStatus.Parent = header
 
 local addressLabel = Instance.new("TextLabel")
 addressLabel.BackgroundTransparency = 1
 addressLabel.Size = UDim2.new(1, 0, 0, 18)
 addressLabel.Font = Enum.Font.Gotham
-addressLabel.Text = "Server address"
-addressLabel.TextColor3 = Color3.fromRGB(190, 190, 190)
+addressLabel.Text = "Server port"
+addressLabel.TextColor3 = Color3.fromRGB(180, 182, 190)
 addressLabel.TextSize = 12
 addressLabel.TextXAlignment = Enum.TextXAlignment.Left
 addressLabel.LayoutOrder = 2
 addressLabel.Parent = root
 
 local addressBox = Instance.new("TextBox")
-addressBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-addressBox.BorderColor3 = Color3.fromRGB(80, 80, 80)
+addressBox.BackgroundColor3 = Color3.fromRGB(42, 43, 50)
+addressBox.BorderColor3 = Color3.fromRGB(75, 76, 86)
 addressBox.ClearTextOnFocus = false
 addressBox.Font = Enum.Font.Code
 addressBox.PlaceholderText = DEFAULT_SERVER
@@ -96,7 +106,7 @@ addressBox.LayoutOrder = 3
 addressBox.Parent = root
 
 local connectButton = Instance.new("TextButton")
-connectButton.BackgroundColor3 = Color3.fromRGB(98, 70, 180)
+connectButton.BackgroundColor3 = Color3.fromRGB(100, 72, 190)
 connectButton.BorderSizePixel = 0
 connectButton.Font = Enum.Font.GothamMedium
 connectButton.Size = UDim2.new(1, 0, 0, 34)
@@ -106,58 +116,65 @@ connectButton.TextSize = 14
 connectButton.LayoutOrder = 4
 connectButton.Parent = root
 
-local statusLabel = Instance.new("TextLabel")
-statusLabel.BackgroundTransparency = 1
-statusLabel.Size = UDim2.new(1, 0, 0, 22)
-statusLabel.Font = Enum.Font.Gotham
-statusLabel.Text = "Disconnected"
-statusLabel.TextColor3 = Color3.fromRGB(220, 110, 110)
-statusLabel.TextSize = 12
-statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-statusLabel.LayoutOrder = 5
-statusLabel.Parent = root
+local reportLabel = Instance.new("TextLabel")
+reportLabel.BackgroundTransparency = 1
+reportLabel.Size = UDim2.new(1, 0, 0, 38)
+reportLabel.Font = Enum.Font.Gotham
+reportLabel.Text = "Ready"
+reportLabel.TextColor3 = Color3.fromRGB(180, 182, 190)
+reportLabel.TextSize = 12
+reportLabel.TextWrapped = true
+reportLabel.TextXAlignment = Enum.TextXAlignment.Left
+reportLabel.LayoutOrder = 5
+reportLabel.Parent = root
 
 local actions = Instance.new("Frame")
 actions.BackgroundTransparency = 1
-actions.Size = UDim2.new(1, 0, 0, 34)
+actions.Size = UDim2.new(1, 0, 0, 70)
 actions.LayoutOrder = 6
 actions.Parent = root
 
-local actionLayout = Instance.new("UIListLayout")
-actionLayout.FillDirection = Enum.FillDirection.Horizontal
-actionLayout.Padding = UDim.new(0, 8)
+local actionLayout = Instance.new("UIGridLayout")
+actionLayout.CellPadding = UDim2.fromOffset(8, 8)
+actionLayout.CellSize = UDim2.new(0.5, -4, 0, 30)
 actionLayout.Parent = actions
 
-local syncButton = Instance.new("TextButton")
-syncButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-syncButton.BorderSizePixel = 0
-syncButton.Font = Enum.Font.GothamMedium
-syncButton.Size = UDim2.new(0.5, -4, 1, 0)
-syncButton.Text = "Sync"
-syncButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-syncButton.TextSize = 13
-syncButton.Parent = actions
+local function makeAction(text, color)
+    local button = Instance.new("TextButton")
+    button.BackgroundColor3 = color or Color3.fromRGB(52, 53, 61)
+    button.BorderSizePixel = 0
+    button.Font = Enum.Font.GothamMedium
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 12
+    button.Parent = actions
+    return button
+end
 
-local exportButton = Instance.new("TextButton")
-exportButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-exportButton.BorderSizePixel = 0
-exportButton.Font = Enum.Font.GothamMedium
-exportButton.Size = UDim2.new(0.5, -4, 1, 0)
-exportButton.Text = "Export"
-exportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-exportButton.TextSize = 13
-exportButton.Parent = actions
+local syncButton = makeAction("Sync")
+local exportButton = makeAction("Export")
+local exportCurrentButton = makeAction("ExportCurrent", Color3.fromRGB(75, 58, 130))
+local repairButton = makeAction("Repair Tree")
 
-local exportCurrentButton = Instance.new("TextButton")
-exportCurrentButton.BackgroundColor3 = Color3.fromRGB(75, 58, 130)
-exportCurrentButton.BorderSizePixel = 0
-exportCurrentButton.Font = Enum.Font.GothamMedium
-exportCurrentButton.Size = UDim2.new(1, 0, 0, 34)
-exportCurrentButton.Text = "ExportCurrent"
-exportCurrentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-exportCurrentButton.TextSize = 13
-exportCurrentButton.LayoutOrder = 7
-exportCurrentButton.Parent = root
+local function setConnection(text, color)
+    connectionStatus.Text = text
+    connectionStatus.TextColor3 = color
+end
+
+local function setReport(text, color, duration)
+    statusToken += 1
+    local token = statusToken
+    reportLabel.Text = text
+    reportLabel.TextColor3 = color or Color3.fromRGB(180, 182, 190)
+    if duration then
+        task.delay(duration, function()
+            if statusToken == token then
+                reportLabel.Text = "Ready"
+                reportLabel.TextColor3 = Color3.fromRGB(180, 182, 190)
+            end
+        end)
+    end
+end
 
 local function getBaseUrl()
     local address = string.gsub(addressBox.Text, "^%s*(.-)%s*$", "%1")
@@ -179,21 +196,25 @@ local function getBaseUrl()
 end
 
 local function request(path, method, body)
-    local result = HttpService:RequestAsync({
-        Url = getBaseUrl() .. path,
-        Method = method or "GET",
-        Headers = { ["Content-Type"] = "application/json" },
-        Body = body and HttpService:JSONEncode(body) or nil
-    })
-    if not result.Success then
-        error("Morado request failed: " .. result.StatusMessage)
+    local lastError
+    for attempt = 1, 3 do
+        local success, result = pcall(function()
+            return HttpService:RequestAsync({
+                Url = getBaseUrl() .. path,
+                Method = method or "GET",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = body and HttpService:JSONEncode(body) or nil
+            })
+        end)
+        if success and result.Success then
+            return HttpService:JSONDecode(result.Body)
+        end
+        lastError = success and result.StatusMessage or result
+        if attempt < 3 then
+            task.wait(0.35 * attempt)
+        end
     end
-    return HttpService:JSONDecode(result.Body)
-end
-
-local function setStatus(text, color)
-    statusLabel.Text = text
-    statusLabel.TextColor3 = color
+    error("Morado request failed: " .. tostring(lastError))
 end
 
 local function connect()
@@ -202,18 +223,45 @@ local function connect()
     end)
     if not success then
         connected = false
-        setStatus("Connection failed", Color3.fromRGB(220, 110, 110))
+        setConnection("Disconnected", Color3.fromRGB(220, 110, 110))
+        setReport("Connection failed", Color3.fromRGB(220, 110, 110), 3)
         return
     end
     connected = true
     revision = result.revision or 0
-    setStatus("Connected - protocol " .. tostring(result.protocol), Color3.fromRGB(110, 220, 140))
+    setConnection("Connected", Color3.fromRGB(110, 220, 140))
+    setReport("Connected to protocol " .. tostring(result.protocol), Color3.fromRGB(110, 220, 140), 3)
+end
+
+local function splitPath(path)
+    local parts = {}
+    for part in string.gmatch(path, "[^/]+") do
+        table.insert(parts, part)
+    end
+    return parts
+end
+
+local function instancePath(update)
+    local parts = splitPath(update.path)
+    if update.className == "Folder" then
+        return update.path
+    end
+    local last = parts[#parts]
+    if string.match(last, "%.morado%.json$") then
+        parts[#parts] = string.gsub(last, "%.morado%.json$", "")
+    elseif string.match(last, "%.module%.lua$") or string.match(last, "%.server%.lua$") or string.match(last, "%.client%.lua$") then
+        if last == "init.module.lua" then
+            table.remove(parts, #parts)
+        else
+            parts[#parts] = string.gsub(last, "%.server%.lua$", "")
+            parts[#parts] = string.gsub(parts[#parts], "%.client%.lua$", "")
+            parts[#parts] = string.gsub(parts[#parts], "%.module%.lua$", "")
+        end
+    end
+    return table.concat(parts, "/")
 end
 
 local function getOrCreateParent(pathParts)
-    if #pathParts == 0 then
-        error("Morado received a script without a parent path")
-    end
     local parent = serviceRoots[pathParts[1]]
     if not parent then
         error("Morado does not recognize service " .. tostring(pathParts[1]))
@@ -223,6 +271,7 @@ local function getOrCreateParent(pathParts)
         if not child then
             child = Instance.new("Folder")
             child.Name = pathParts[index]
+            child:SetAttribute("MoradoManaged", true)
             child.Parent = parent
         end
         parent = child
@@ -230,60 +279,90 @@ local function getOrCreateParent(pathParts)
     return parent
 end
 
-local function applyUpdate(update)
-    if type(update) ~= "table" or type(update.path) ~= "string" or type(update.className) ~= "string" or type(update.content) ~= "string" then
-        error("Morado received an invalid script update")
-    end
-    if update.className ~= "Script" and update.className ~= "LocalScript" and update.className ~= "ModuleScript" then
-        error("Morado does not recognize script type " .. update.className)
-    end
-    local pieces = {}
-    for part in string.gmatch(update.path, "[^/]+") do
-        table.insert(pieces, part)
-    end
-    if #pieces < 2 then
-        error("Morado received an invalid script path " .. update.path)
-    end
-    local fileName = pieces[#pieces]
-    local parentParts = {}
-    for index = 1, #pieces - 1 do
-        table.insert(parentParts, pieces[index])
-    end
-    local parent = getOrCreateParent(parentParts)
-    local name = string.gsub(fileName, "%.server%.lua$", "")
-    name = string.gsub(name, "%.client%.lua$", "")
-    name = string.gsub(name, "%.module%.lua$", "")
-    if name == "init" and #pieces > 2 then
-        name = pieces[#pieces - 1]
-    end
-    if name == "" or name == fileName then
-        error("Morado received an unsupported script filename " .. fileName)
-    end
+local function convertInstance(parent, name, className)
     local instance = parent:FindFirstChild(name)
-    if not instance or instance.ClassName ~= update.className then
-        if instance then
-            local children = instance:GetChildren()
-            for _, child in ipairs(children) do
-                child.Parent = nil
-            end
-            instance:Destroy()
-            instance = nil
-            if #children > 0 then
-                instance = Instance.new(update.className)
-                instance.Name = name
-                instance.Parent = parent
-                for _, child in ipairs(children) do
-                    child.Parent = instance
-                end
-            end
+    if instance and instance.ClassName == className then
+        return instance, false, false
+    end
+    local children = {}
+    if instance then
+        for _, child in ipairs(instance:GetChildren()) do
+            table.insert(children, child)
         end
-        if not instance then
-            instance = Instance.new(update.className)
-            instance.Name = name
-            instance.Parent = parent
+        instance:Destroy()
+    end
+    instance = Instance.new(className)
+    instance.Name = name
+    instance:SetAttribute("MoradoManaged", true)
+    instance.Parent = parent
+    for _, child in ipairs(children) do
+        child.Parent = instance
+    end
+    return instance, true, instance ~= nil
+end
+
+local function applyUpdate(update, desired, report)
+    local parts = splitPath(update.path)
+    if #parts < 1 then
+        error("Invalid Morado path")
+    end
+    local path = instancePath(update)
+    local pathParts = splitPath(path)
+    local name = pathParts[#pathParts]
+    table.remove(pathParts, #pathParts)
+    local parent = getOrCreateParent(pathParts)
+    local className = update.className
+    if className == "Folder" then
+        className = "Folder"
+    elseif className == "Object" then
+        local metadata = HttpService:JSONDecode(update.content)
+        className = metadata.className or "Folder"
+    end
+    local instance, replaced = convertInstance(parent, name, className)
+    instance:SetAttribute("MoradoManaged", true)
+    if update.className == "Script" or update.className == "LocalScript" or update.className == "ModuleScript" then
+        instance.Source = update.content
+    end
+    if update.className == "Object" then
+        local metadata = HttpService:JSONDecode(update.content)
+        for property, value in pairs(metadata.properties or {}) do
+            pcall(function()
+                instance[property] = value
+            end)
         end
     end
-    instance.Source = update.content
+    desired[path] = true
+    if replaced then
+        report.replaced += 1
+    elseif instance:GetAttribute("MoradoSyncedRevision") == revision then
+        report.updated += 1
+    else
+        report.created += 1
+    end
+    instance:SetAttribute("MoradoSyncedRevision", revision)
+end
+
+local function collectManaged(rootInstance, path, result)
+    for _, child in ipairs(rootInstance:GetChildren()) do
+        local childPath = path .. "/" .. child.Name
+        if child:GetAttribute("MoradoManaged") then
+            result[childPath] = child
+        end
+        collectManaged(child, childPath, result)
+    end
+end
+
+local function reconcile(desired, report)
+    for serviceName, service in pairs(serviceRoots) do
+        local existing = {}
+        collectManaged(service, serviceName, existing)
+        for path, instance in pairs(existing) do
+            if not desired[path] then
+                instance:Destroy()
+                report.deleted += 1
+            end
+        end
+    end
 end
 
 local function sync()
@@ -291,49 +370,60 @@ local function sync()
         return
     end
     syncing = true
-    local success, synced, skipped = pcall(function()
+    local success, report = pcall(function()
         local message = request("/api/sync")
         local updates = message.updates or {}
-        local synced = 0
-        local skipped = 0
+        local desired = {}
+        local result = {
+            created = 0,
+            updated = 0,
+            replaced = 0,
+            deleted = 0,
+            skipped = 0
+        }
         ChangeHistoryService:SetWaypoint("Morado sync started")
         table.sort(updates, function(left, right)
-            local leftDepth = 0
-            local rightDepth = 0
-            for _ in string.gmatch(left.path, "[^/]+") do
-                leftDepth += 1
-            end
-            for _ in string.gmatch(right.path, "[^/]+") do
-                rightDepth += 1
-            end
-            if leftDepth == rightDepth then
-                return left.path < right.path
-            end
-            return leftDepth < rightDepth
+            local leftDepth = #splitPath(instancePath(left))
+            local rightDepth = #splitPath(instancePath(right))
+            return leftDepth == rightDepth and left.path < right.path or leftDepth < rightDepth
         end)
         for _, update in ipairs(updates) do
-            local updateSuccess = pcall(applyUpdate, update)
-            if updateSuccess then
-                synced += 1
-            else
-                skipped += 1
+            local updateSuccess = pcall(applyUpdate, update, desired, result)
+            if not updateSuccess then
+                result.skipped += 1
             end
         end
+        reconcile(desired, result)
         ChangeHistoryService:SetWaypoint("Morado sync complete")
         revision = message.revision or revision
-        return synced, skipped
+        return result
     end)
     if success then
-        if skipped > 0 then
-            setStatus("Synced " .. tostring(synced) .. ", skipped " .. tostring(skipped), Color3.fromRGB(235, 190, 100))
-        else
-            setStatus("Synced " .. tostring(synced) .. " scripts", Color3.fromRGB(110, 220, 140))
-        end
+        setConnection("Connected", Color3.fromRGB(110, 220, 140))
+        setReport(
+            "Synced  Created " .. tostring(report.created) ..
+            "  Updated " .. tostring(report.updated) ..
+            "  Replaced " .. tostring(report.replaced) ..
+            "  Deleted " .. tostring(report.deleted) ..
+            "  Skipped " .. tostring(report.skipped),
+            report.skipped > 0 and Color3.fromRGB(235, 190, 100) or Color3.fromRGB(110, 220, 140),
+            3
+        )
     else
         connected = false
-        setStatus("Sync failed", Color3.fromRGB(220, 110, 110))
+        setConnection("Disconnected", Color3.fromRGB(220, 110, 110))
+        setReport("Sync failed", Color3.fromRGB(220, 110, 110), 3)
     end
     syncing = false
+end
+
+local function encodeObject(instance)
+    return HttpService:JSONEncode({
+        className = instance.ClassName,
+        properties = {
+            Name = instance.Name
+        }
+    })
 end
 
 local function collect(container, prefix, result)
@@ -345,68 +435,38 @@ local function collect(container, prefix, result)
             table.insert(result, { path = path .. ".client.lua", className = "LocalScript", content = child.Source })
         elseif child:IsA("ModuleScript") then
             table.insert(result, { path = path .. ".module.lua", className = "ModuleScript", content = child.Source })
-        end
-
-        local function getServicePath(instance)
-            local parts = {}
-            local current = instance
-            while current and current ~= game do
-                table.insert(parts, 1, current.Name)
-                if serviceRoots[current.Name] == current then
-                    return table.concat(parts, "/"), current
-                end
-                current = current.Parent
-            end
-            return nil, nil
-        end
-
-        local function collectCurrent(instance, path, result)
-            if instance:IsA("Script") then
-                table.insert(result, { path = path .. ".server.lua", className = "Script", content = instance.Source })
-            elseif instance:IsA("LocalScript") then
-                table.insert(result, { path = path .. ".client.lua", className = "LocalScript", content = instance.Source })
-            elseif instance:IsA("ModuleScript") then
-                table.insert(result, { path = path .. ".module.lua", className = "ModuleScript", content = instance.Source })
-            end
-            local childPath = path
-            if instance:IsA("LuaSourceContainer") then
-                childPath = path
-            end
-            for _, child in ipairs(instance:GetChildren()) do
-                collectCurrent(child, childPath .. "/" .. child.Name, result)
-            end
-        end
-
-        local function exportCurrent()
-            local selection = game:GetService("Selection"):Get()
-            local instance = selection[1]
-            if not instance then
-                setStatus("Select an instance first", Color3.fromRGB(235, 190, 100))
-                return
-            end
-            local rootPath, service = getServicePath(instance)
-            if not rootPath or not service then
-                setStatus("Selection is not under a supported service", Color3.fromRGB(220, 110, 110))
-                return
-            end
-            local result = {}
-            collectCurrent(instance, rootPath, result)
-            local success, count = pcall(function()
-                local response = request("/api/export-current", "POST", {
-                    rootPath = rootPath,
-                    rootName = instance.Name,
-                    scripts = result
-                })
-                return response.count or #result
-            end)
-            if success then
-                setStatus("Exported current " .. tostring(count) .. " scripts", Color3.fromRGB(110, 220, 140))
-            else
-                connected = false
-                setStatus("ExportCurrent failed", Color3.fromRGB(220, 110, 110))
-            end
+        elseif child.ClassName ~= "Folder" then
+            table.insert(result, { path = path .. ".morado.json", className = "Object", content = encodeObject(child) })
         end
         collect(child, path, result)
+    end
+end
+
+local function getServicePath(instance)
+    local parts = {}
+    local current = instance
+    while current and current ~= game do
+        table.insert(parts, 1, current.Name)
+        if serviceRoots[current.Name] == current then
+            return table.concat(parts, "/"), current
+        end
+        current = current.Parent
+    end
+    return nil, nil
+end
+
+local function collectCurrent(instance, path, result)
+    if instance:IsA("Script") then
+        table.insert(result, { path = path .. ".server.lua", className = "Script", content = instance.Source })
+    elseif instance:IsA("LocalScript") then
+        table.insert(result, { path = path .. ".client.lua", className = "LocalScript", content = instance.Source })
+    elseif instance:IsA("ModuleScript") then
+        table.insert(result, { path = path .. ".module.lua", className = "ModuleScript", content = instance.Source })
+    elseif instance.ClassName ~= "Folder" then
+        table.insert(result, { path = path .. ".morado.json", className = "Object", content = encodeObject(instance) })
+    end
+    for _, child in ipairs(instance:GetChildren()) do
+        collectCurrent(child, path .. "/" .. child.Name, result)
     end
 end
 
@@ -416,16 +476,55 @@ local function export()
         for name, service in pairs(services) do
             collect(service, name, scripts)
         end
-        request("/api/export", "POST", scripts)
-        return #scripts
+        return request("/api/export", "POST", scripts)
     end)
     if success then
-        setStatus("Exported " .. tostring(result) .. " scripts", Color3.fromRGB(110, 220, 140))
+        setReport("Exported " .. tostring(result.count or 0) .. " source objects", Color3.fromRGB(110, 220, 140), 3)
     else
-        connected = false
-        setStatus("Export failed", Color3.fromRGB(220, 110, 110))
+        setReport("Export failed", Color3.fromRGB(220, 110, 110), 3)
     end
 end
+
+local function exportCurrent()
+    local instance = Selection:Get()[1]
+    if not instance then
+        setReport("Select an instance first", Color3.fromRGB(235, 190, 100), 3)
+        return
+    end
+    local rootPath, service = getServicePath(instance)
+    if not rootPath or not service then
+        setReport("Selection is not under a supported service", Color3.fromRGB(220, 110, 110), 3)
+        return
+    end
+    local scripts = {}
+    collectCurrent(instance, rootPath, scripts)
+    local success, result = pcall(function()
+        return request("/api/export-current", "POST", {
+            rootPath = rootPath,
+            rootName = instance.Name,
+            scripts = scripts
+        })
+    end)
+    if success then
+        setReport("ExportCurrent replaced " .. tostring(result.count or 0) .. " source objects", Color3.fromRGB(110, 220, 140), 3)
+    else
+        setReport("ExportCurrent failed", Color3.fromRGB(220, 110, 110), 3)
+    end
+end
+
+local function repair()
+    sync()
+end
+
+openButton.Click:Connect(function()
+    widget.Enabled = not widget.Enabled
+end)
+
+connectButton.MouseButton1Click:Connect(connect)
+syncButton.MouseButton1Click:Connect(sync)
+exportButton.MouseButton1Click:Connect(export)
+exportCurrentButton.MouseButton1Click:Connect(exportCurrent)
+repairButton.MouseButton1Click:Connect(repair)
 
 task.spawn(function()
     while true do
@@ -438,17 +537,8 @@ task.spawn(function()
                 sync()
             elseif not success then
                 connected = false
-                setStatus("Connection lost", Color3.fromRGB(220, 110, 110))
+                setConnection("Disconnected", Color3.fromRGB(220, 110, 110))
             end
         end
     end
 end)
-
-openButton.Click:Connect(function()
-    widget.Enabled = not widget.Enabled
-end)
-
-connectButton.MouseButton1Click:Connect(connect)
-syncButton.MouseButton1Click:Connect(sync)
-exportButton.MouseButton1Click:Connect(export)
-exportCurrentButton.MouseButton1Click:Connect(exportCurrent)
