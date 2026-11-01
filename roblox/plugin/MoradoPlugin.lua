@@ -326,6 +326,16 @@ local function applyUpdate(update, desired, report)
     if update.className == "Object" then
         local metadata = HttpService:JSONDecode(update.content)
         for property, value in pairs(metadata.properties or {}) do
+            if type(value) == "table" and value.__type == "Color3" then
+                value = Color3.new(value.r, value.g, value.b)
+            elseif type(value) == "table" and value.__type == "Vector3" then
+                value = Vector3.new(value.x, value.y, value.z)
+            elseif type(value) == "table" and value.__type == "CFrame" then
+                value = CFrame.new(table.unpack(value.components))
+            elseif type(value) == "table" and value.__type == "EnumItem" then
+                local enumType = Enum[value.enumType]
+                value = enumType and enumType[value.name]
+            end
             pcall(function()
                 instance[property] = value
             end)
@@ -417,12 +427,89 @@ local function sync()
     syncing = false
 end
 
+local function encodeValue(value)
+    local valueType = typeof(value)
+    if valueType == "Color3" then
+        return {
+            __type = "Color3",
+            r = value.R,
+            g = value.G,
+            b = value.B
+        }
+    elseif valueType == "Vector3" then
+        return {
+            __type = "Vector3",
+            x = value.X,
+            y = value.Y,
+            z = value.Z
+        }
+    elseif valueType == "CFrame" then
+        local components = { value:GetComponents() }
+        return {
+            __type = "CFrame",
+            components = components
+        }
+    elseif valueType == "EnumItem" then
+        return {
+            __type = "EnumItem",
+            enumType = value.EnumType.Name,
+            name = value.Name
+        }
+    elseif type(value) == "string" or type(value) == "number" or type(value) == "boolean" then
+        return value
+    end
+    return nil
+end
+
+local function readProperty(instance, property)
+    local success, value = pcall(function()
+        return instance[property]
+    end)
+    if success then
+        return encodeValue(value)
+    end
+    return nil
+end
+
 local function encodeObject(instance)
+    local properties = {
+        Name = instance.Name
+    }
+    local propertyNames = {
+        "AnimationId",
+        "MeshId",
+        "TextureID",
+        "TextureId",
+        "Color",
+        "Material",
+        "Transparency",
+        "Reflectance",
+        "CastShadow",
+        "DoubleSided",
+        "Anchored",
+        "CanCollide",
+        "CanTouch",
+        "CanQuery",
+        "Massless",
+        "Size",
+        "CFrame",
+        "AlphaMode",
+        "ColorMap",
+        "EmissiveMaskContent",
+        "EmissiveTintColor",
+        "MetalnessMap",
+        "NormalMap",
+        "RoughnessMap"
+    }
+    for _, property in ipairs(propertyNames) do
+        local value = readProperty(instance, property)
+        if value ~= nil then
+            properties[property] = value
+        end
+    end
     return HttpService:JSONEncode({
         className = instance.ClassName,
-        properties = {
-            Name = instance.Name
-        }
+        properties = properties
     })
 end
 

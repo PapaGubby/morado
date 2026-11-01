@@ -114,6 +114,11 @@ interface CurrentExport {
 
 async function findMatchingTargets(root: string, rootPath: string, rootName: string): Promise<string[]> {
   const expected = resolve(root, rootPath);
+  try {
+    const entries = await readdir(expected, { withFileTypes: true });
+    if (entries.length >= 0) return [expected];
+  } catch {
+  }
   const candidates = new Set<string>();
   const exactName = rootName.toLowerCase();
 
@@ -146,7 +151,7 @@ function exportPath(rootPath: string, rootName: string, path: string): string {
   const normalizedPath = path.replaceAll("\\", "/");
   if (normalizedPath === `${normalizedRoot}.server.lua`) return `${rootName}.server.lua`;
   if (normalizedPath === `${normalizedRoot}.client.lua`) return `${rootName}.client.lua`;
-  if (normalizedPath === `${normalizedRoot}.module.lua`) return `${rootName}/init.module.lua`;
+  if (normalizedPath === `${normalizedRoot}.module.lua`) return "init.module.lua";
   const prefix = `${normalizedRoot}/`;
   return normalizedPath.startsWith(prefix)
     ? normalizedPath.slice(prefix.length)
