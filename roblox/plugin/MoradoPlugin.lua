@@ -20,7 +20,7 @@ local toolbar = plugin:CreateToolbar("Morado")
 local openButton = toolbar:CreateButton("Morado", "Open Morado", "")
 local widgetInfo = DockWidgetPluginGuiInfo.new(
     Enum.InitialDockState.Float,
-    true,
+    false,
     false,
     320,
     260,
@@ -29,6 +29,7 @@ local widgetInfo = DockWidgetPluginGuiInfo.new(
 )
 local widget = plugin:CreateDockWidgetPluginGui("MoradoDock", widgetInfo)
 widget.Title = "Morado"
+widget.Enabled = false
 
 local root = Instance.new("Frame")
 root.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
